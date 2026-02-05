@@ -22,6 +22,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28.1",
+    "img2pdf>=0.6.3",
     "playwright>=1.58.0",
 ]
 

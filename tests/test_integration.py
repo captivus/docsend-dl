@@ -109,19 +109,45 @@ class TestHighLevelAPI:
     """Test the download_deck convenience function."""
 
     @pytest.mark.asyncio
-    async def test_download_deck(self):
+    async def test_download_deck_images(self):
+        """Test download_deck with images_only=True (original behavior)."""
         ref = _load_reference()["n43v89r"]
         tmp_dir = Path(tempfile.mkdtemp(prefix="docsend_test_"))
 
         try:
             result = await download_deck(
                 url=ref["url"],
-                output_dir=tmp_dir,
+                output=tmp_dir,
+                images_only=True,
             )
 
             assert result.successes == ref["slide_count"]
             assert result.failures == 0
             assert result.slide_count == ref["slide_count"]
             assert result.total_bytes > 0
+            assert result.output_path == tmp_dir
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_download_deck_pdf(self):
+        """Test download_deck in default PDF mode."""
+        ref = _load_reference()["n43v89r"]
+        tmp_dir = Path(tempfile.mkdtemp(prefix="docsend_test_"))
+
+        try:
+            pdf_path = tmp_dir / "output.pdf"
+            result = await download_deck(
+                url=ref["url"],
+                output=pdf_path,
+            )
+
+            assert result.successes == ref["slide_count"]
+            assert result.failures == 0
+            assert result.output_path == pdf_path.resolve()
+            assert result.output_path.exists()
+            assert result.output_path.suffix == ".pdf"
+            assert result.total_bytes > 0
+            assert result.output_path.read_bytes()[:5] == b"%PDF-"
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)

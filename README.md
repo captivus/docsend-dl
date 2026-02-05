@@ -1,9 +1,9 @@
 # docsend-dl
 
-**Save any public DocSend deck as a PDF — one command, full quality.**
+**Save any public [Dropbox DocSend](https://www.docsend.com/) deck as a PDF — one command, full quality.**
 
-[![PyPI version](https://img.shields.io/pypi/v/docsend-dl)](https://pypi.org/project/docsend-dl/)
-[![Python versions](https://img.shields.io/pypi/pyversions/docsend-dl)](https://pypi.org/project/docsend-dl/)
+[![PyPI version](https://img.shields.io/pypi/v/docsend-dl?v=1)](https://pypi.org/project/docsend-dl/)
+[![Python versions](https://img.shields.io/pypi/pyversions/docsend-dl?v=1)](https://pypi.org/project/docsend-dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Quickstart

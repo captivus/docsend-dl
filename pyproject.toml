@@ -1,7 +1,7 @@
 [project]
 name = "docsend-dl"
 version = "0.1.0"
-description = "Download slides from public DocSend decks as PNG images"
+description = "Download slides from public Dropbox DocSend decks as PDF or PNG images"
 readme = "README.md"
 license = "MIT"
 authors = [

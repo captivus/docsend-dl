@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -80,6 +81,8 @@ async def download_deck(
     concurrency: int = 10,
     max_retries: int = 3,
     images_only: bool = False,
+    on_status: Callable[[str], None] | None = None,
+    on_slide_done: Callable[[], None] | None = None,
 ) -> DeckDownloadResult:
     """Download all slides from a public DocSend deck.
 
@@ -119,7 +122,11 @@ async def download_deck(
         ))
         print(f"Saved PDF to {result.output_path}")
     """
-    deck_info = await extract_slide_urls(url=url, headless=headless)
+    deck_info = await extract_slide_urls(
+        url=url,
+        headless=headless,
+        on_status=on_status,
+    )
 
     if images_only:
         resolved_dir = Path(output) if output else Path(deck_info.title)
@@ -130,6 +137,7 @@ async def download_deck(
             output_dir=resolved_dir,
             concurrency=concurrency,
             max_retries=max_retries,
+            on_slide_done=on_slide_done,
         )
 
         return DeckDownloadResult(
@@ -152,6 +160,7 @@ async def download_deck(
             output_dir=tmp_path,
             concurrency=concurrency,
             max_retries=max_retries,
+            on_slide_done=on_slide_done,
         )
 
         image_paths = sorted(tmp_path.glob("slide_*.png"))

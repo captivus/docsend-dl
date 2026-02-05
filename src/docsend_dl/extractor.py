@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
@@ -19,41 +20,33 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-# JavaScript executed inside the browser to extract slide URLs.
-# Fetches all page_data endpoints (same-origin) and returns the
-# directImageUrl (S3 signed URL) for each slide.
-_EXTRACT_URLS_JS = """
+# JavaScript executed inside the browser to extract slide URLs for a
+# single batch.  Called once per batch from Python so that progress can
+# be reported between batches.
+_EXTRACT_BATCH_JS = """
 async (args) => {
-    const { slug, slideCount, batchSize } = args;
+    const { slug, batchStart, batchEnd } = args;
     const ts = Math.floor(Date.now() / 1000);
-    const urls = new Array(slideCount);
-    const errors = [];
+    const promises = [];
 
-    const totalBatches = Math.ceil(slideCount / batchSize);
-    for (let batch = 0; batch < totalBatches; batch++) {
-        const start = batch * batchSize;
-        const end = Math.min(start + batchSize, slideCount);
-        const promises = [];
-
-        for (let i = start; i < end; i++) {
-            promises.push(
-                fetch(`/view/${slug}/page_data/${i + 1}?timezoneOffset=-21600&viewLoadTime=${ts}`)
-                    .then(r => {
-                        if (!r.ok) throw new Error('HTTP ' + r.status);
-                        return r.json();
-                    })
-                    .then(data => {
-                        urls[i] = data.directImageUrl || null;
-                    })
-                    .catch(e => {
-                        urls[i] = null;
-                        errors.push(`Slide ${i + 1}: ${e.message}`);
-                    })
-            );
-        }
-        await Promise.all(promises);
+    for (let i = batchStart; i < batchEnd; i++) {
+        promises.push(
+            fetch(`/view/${slug}/page_data/${i + 1}?timezoneOffset=-21600&viewLoadTime=${ts}`)
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(data => ({ index: i, url: data.directImageUrl || null }))
+                .catch(e => ({ index: i, url: null, error: `Slide ${i + 1}: ${e.message}` }))
+        );
     }
 
+    const results = await Promise.all(promises);
+    const urls = [], errors = [];
+    for (const r of results) {
+        urls.push({ index: r.index, url: r.url });
+        if (r.error) errors.push(r.error);
+    }
     return { urls, errors };
 }
 """
@@ -139,6 +132,7 @@ async def extract_slide_urls(
     url: str,
     *,
     headless: bool = True,
+    on_status: Callable[[str], None] | None = None,
 ) -> DeckInfo:
     """Navigate to a DocSend deck and extract S3 image URLs for all slides.
 
@@ -159,9 +153,15 @@ async def extract_slide_urls(
         EmailGateError: If the deck requires email verification.
         ExtractionError: If slides cannot be found on the page.
     """
+    def _report(message: str) -> None:
+        if on_status is not None:
+            on_status(message)
+
     slug = parse_docsend_url(url=url)
 
     async with async_playwright() as p:
+        _report("Launching browser...")
+
         browser = await p.chromium.launch(
             headless=headless,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
@@ -176,10 +176,14 @@ async def extract_slide_urls(
             'Object.defineProperty(navigator, "webdriver", { get: () => undefined });'
         )
 
+        _report("Loading page (this may take a while)...")
+
         try:
             await page.goto(url, wait_until="networkidle", timeout=30_000)
         except PlaywrightTimeout:
             await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+
+        _report("Waiting for slides...")
 
         try:
             await page.wait_for_selector(".carousel-inner .item", timeout=15_000)
@@ -206,27 +210,38 @@ async def extract_slide_urls(
             await browser.close()
             raise ExtractionError("No slides found in this deck.")
 
-        result = await page.evaluate(
-            _EXTRACT_URLS_JS,
-            {
-                "slug": slug,
-                "slideCount": slide_count,
-                "batchSize": _PAGE_DATA_BATCH_SIZE,
-            },
-        )
+        all_urls: list[str | None] = [None] * slide_count
+        all_warnings: list[str] = []
+        total_batches = -(-slide_count // _PAGE_DATA_BATCH_SIZE)
+
+        for batch_idx in range(total_batches):
+            batch_start = batch_idx * _PAGE_DATA_BATCH_SIZE
+            batch_end = min(batch_start + _PAGE_DATA_BATCH_SIZE, slide_count)
+
+            _report(f"Extracting URLs ({batch_end}/{slide_count})...")
+
+            batch_result = await page.evaluate(
+                _EXTRACT_BATCH_JS,
+                {
+                    "slug": slug,
+                    "batchStart": batch_start,
+                    "batchEnd": batch_end,
+                },
+            )
+
+            for entry in batch_result["urls"]:
+                all_urls[entry["index"]] = entry["url"]
+            all_warnings.extend(batch_result["errors"])
 
         await browser.close()
 
-        urls: list[str | None] = result["urls"]
-        warnings: list[str] = result["errors"]
-
-        valid_count = sum(1 for u in urls if u)
+        valid_count = sum(1 for u in all_urls if u)
         if valid_count == 0:
             raise ExtractionError("Could not retrieve any image URLs from page_data endpoints.")
 
         return DeckInfo(
             title=deck_title,
             slide_count=slide_count,
-            image_urls=urls,
-            warnings=warnings,
+            image_urls=all_urls,
+            warnings=all_warnings,
         )

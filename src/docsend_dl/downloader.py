@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -59,6 +60,7 @@ async def download_slides(
     *,
     concurrency: int = _DEFAULT_CONCURRENCY,
     max_retries: int = _DEFAULT_MAX_RETRIES,
+    on_slide_done: Callable[[], None] | None = None,
 ) -> DownloadResult:
     """Download all slide images from S3 signed URLs in parallel.
 
@@ -76,6 +78,14 @@ async def download_slides(
     tasks = []
     skipped = 0
 
+    async def _tracked(
+        coro: asyncio.coroutines,
+    ) -> tuple[Path, int | None]:
+        result = await coro
+        if on_slide_done is not None:
+            on_slide_done()
+        return result
+
     async with httpx.AsyncClient() as client:
         for i, url in enumerate(urls):
             num = f"{i + 1:02d}"
@@ -83,15 +93,19 @@ async def download_slides(
 
             if url is None:
                 skipped += 1
+                if on_slide_done is not None:
+                    on_slide_done()
                 continue
 
             tasks.append(
-                _download_one(
-                    client=client,
-                    url=url,
-                    output_path=output_path,
-                    semaphore=semaphore,
-                    max_retries=max_retries,
+                _tracked(
+                    _download_one(
+                        client=client,
+                        url=url,
+                        output_path=output_path,
+                        semaphore=semaphore,
+                        max_retries=max_retries,
+                    )
                 )
             )
 

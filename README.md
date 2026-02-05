@@ -1,94 +1,153 @@
 # docsend-dl
 
-Download all slides from a public [DocSend](https://www.docsend.com/) deck as PNG images.
+**Save any public DocSend deck as a PDF — one command, full quality.**
+
+[![PyPI version](https://img.shields.io/pypi/v/docsend-dl)](https://pypi.org/project/docsend-dl/)
+[![Python versions](https://img.shields.io/pypi/pyversions/docsend-dl)](https://pypi.org/project/docsend-dl/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## Quickstart
+
+```bash
+pip install docsend-dl && playwright install chromium
+docsend-dl https://docsend.com/view/XXXXXX
+```
+
+That's it. You'll get a PDF named after the deck in your current directory.
+
+## Demo
+
+```
+$ docsend-dl https://dbx.docsend.com/view/n43v89r
+Loading DocSend page...
+Found deck: "docsend-n43v89r" (21 slides)
+Got 21/21 image URLs
+Downloading slides...
+Assembling PDF...
+
+Done in 32.4s
+  Slides saved: 21/21
+  PDF size: 9.5 MB
+  Output: /home/user/docsend-n43v89r.pdf
+```
+
+## Features
+
+- **PDF by default** — slides are assembled into a single PDF at full resolution with no re-encoding
+- **PNG export** — pass `--images` to save individual slide images instead
+- **Smart output paths** — pass a `.pdf` filename, a directory, or let it default to `{deck title}.pdf`
+- **Fast** — downloads all slides in parallel with automatic retries
+- **Works with both** `docsend.com` and `dbx.docsend.com` URLs
+- **Headless** — runs in the background by default; use `--no-headless` to watch the browser
 
 ## Installation
+
+You need the package itself plus a Chromium browser for Playwright:
 
 ```bash
 pip install docsend-dl
 playwright install chromium
 ```
 
-Or with [uv](https://docs.astral.sh/uv/):
+Or if you use [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv tool install docsend-dl
 uv run playwright install chromium
 ```
 
-## CLI Usage
+## Usage
+
+### CLI
 
 ```bash
+# Download as PDF (default)
 docsend-dl https://docsend.com/view/XXXXXX
-docsend-dl https://docsend.com/view/XXXXXX --output-dir "My Deck"
+
+# Save PDF to a specific path
+docsend-dl https://docsend.com/view/XXXXXX --output "My Deck.pdf"
+
+# Save PDF into a directory (uses deck title as filename)
+docsend-dl https://docsend.com/view/XXXXXX --output ./downloads
+
+# Download as individual PNG images instead
+docsend-dl https://docsend.com/view/XXXXXX --images
+
+# Show the browser window during download
 docsend-dl https://dbx.docsend.com/view/XXXXXX --no-headless
 ```
 
-Slides are saved as `slide_01.png`, `slide_02.png`, etc. in the output directory.
+### Python API
 
-## Python API
+```python
+import asyncio
+from docsend_dl import download_deck
+
+# Download as PDF (default)
+result = asyncio.run(download_deck(
+    url="https://docsend.com/view/XXXXXX",
+))
+print(f"Saved PDF to {result.output_path} ({result.total_bytes} bytes)")
+
+# Download as individual images
+result = asyncio.run(download_deck(
+    url="https://docsend.com/view/XXXXXX",
+    output="My Deck",
+    images_only=True,
+))
+print(f"Saved {result.successes}/{result.slide_count} slides")
+```
+
+For finer control you can call the extraction and download steps separately:
 
 ```python
 import asyncio
 from pathlib import Path
-from docsend_dl import download_deck
-
-result = asyncio.run(download_deck(
-    url="https://docsend.com/view/XXXXXX",
-    output_dir=Path("My Deck"),
-))
-print(f"Saved {result.successes}/{result.slide_count} slides ({result.total_bytes} bytes)")
-```
-
-For more control, use the lower-level functions:
-
-```python
 from docsend_dl import extract_slide_urls, download_slides
 
-deck_info = await extract_slide_urls(url="https://docsend.com/view/XXXXXX")
-result = await download_slides(urls=deck_info.image_urls, output_dir=Path("output"))
+async def main():
+    deck_info = await extract_slide_urls(url="https://docsend.com/view/XXXXXX")
+    result = await download_slides(
+        urls=deck_info.image_urls,
+        output_dir=Path("slides"),
+    )
+    print(f"Downloaded {result.successes} slides")
+
+asyncio.run(main())
 ```
 
 ## How It Works
 
-1. Launches a headless Chromium browser via [Playwright](https://playwright.dev/python/)
-2. Navigates to the DocSend page and extracts the slide count
-3. Fetches each slide's `page_data` endpoint from within the browser context (same-origin, bypasses bot detection)
-4. Extracts `directImageUrl` (S3 signed URL) from each response
-5. Downloads all images in parallel via [httpx](https://www.python-httpx.org/)
-
-## Testing
-
-Install dev dependencies and run the unit tests (fast, no network):
-
-```bash
-uv run pytest tests/test_url_validation.py
-```
-
-Run the integration tests (downloads real decks, verifies SHA256 checksums):
-
-```bash
-uv run pytest tests/test_integration.py
-```
-
-Run everything:
-
-```bash
-uv run pytest
-```
-
-Skip integration tests (e.g. in CI where network access is unavailable):
-
-```bash
-uv run pytest -m "not integration"
-```
+1. Opens the DocSend page in a headless Chromium browser (via [Playwright](https://playwright.dev/python/))
+2. Extracts each slide's image URL from the page data
+3. Downloads all slide images in parallel (via [httpx](https://www.python-httpx.org/))
+4. Assembles the images into a single PDF (via [img2pdf](https://pypi.org/project/img2pdf/)) or saves them as PNGs
 
 ## Limitations
 
-- Only supports **public** DocSend decks (no email gate or passcode)
+- Only works with **public** decks — email-gated and passcode-protected decks are not supported
 - Requires Chromium to be installed via `playwright install chromium`
-- S3 signed URLs expire in ~10-15 minutes (handled automatically)
+
+## Contributing
+
+```bash
+# Clone and install dev dependencies
+git clone https://github.com/captivus/docsend-dl.git
+cd docsend-dl
+uv sync
+
+# Run unit tests (fast, no network needed)
+uv run pytest -m "not integration"
+
+# Run integration tests (downloads real decks, verifies checksums)
+uv run pytest tests/test_integration.py
+
+# Run everything
+uv run pytest
+```
+
+Bug reports and pull requests are welcome on [GitHub](https://github.com/captivus/docsend-dl/issues).
 
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
+from importlib.metadata import version
 from pathlib import Path
 
 from .assembler import assemble_pdf
@@ -19,7 +20,7 @@ from .extractor import (
     parse_docsend_url,
 )
 
-__version__ = "0.1.0"
+__version__ = version("docsend-dl")
 
 __all__ = [
     "__version__",

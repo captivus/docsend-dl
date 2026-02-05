@@ -19,16 +19,14 @@ That's it. You'll get a PDF named after the deck in your current directory.
 
 ```
 $ docsend-dl https://dbx.docsend.com/view/n43v89r
-Loading DocSend page...
 Found deck: "docsend-n43v89r" (21 slides)
 Got 21/21 image URLs
-Downloading slides...
-Assembling PDF...
-
-Done in 32.4s
-  Slides saved: 21/21
-  PDF size: 9.5 MB
-  Output: /home/user/docsend-n43v89r.pdf
+  Downloading slides ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21/21 0:00:00
+╭──────────────────────── Done in 32.2s ─────────────────────────╮
+│ Slides saved: 21/21                                            │
+│ PDF size: 9.5 MB                                               │
+│ Output: /home/user/docsend-n43v89r.pdf                         │
+╰────────────────────────────────────────────────────────────────╯
 ```
 
 ## Features

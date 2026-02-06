@@ -5,6 +5,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/docsend-dl?v=1)](https://pypi.org/project/docsend-dl/)
 [![Python versions](https://img.shields.io/pypi/pyversions/docsend-dl?v=1)](https://pypi.org/project/docsend-dl/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/docsend-dl)](https://pypi.org/project/docsend-dl/)
+[![Publish](https://github.com/captivus/docsend-dl/actions/workflows/publish.yml/badge.svg)](https://github.com/captivus/docsend-dl/actions/workflows/publish.yml)
 
 ## Quickstart
 

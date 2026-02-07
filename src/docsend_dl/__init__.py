@@ -94,7 +94,8 @@ async def download_deck(
     ``images_only=True`` to save individual PNG files instead.
 
     Args:
-        url: Full DocSend URL (e.g. ``https://docsend.com/view/XXXXXX``).
+        url: Full DocSend URL (e.g. ``https://docsend.com/view/XXXXXX``
+            or ``https://docsend.com/v/SPACE/NAME``).
         output: Output path.  In PDF mode this follows smart resolution:
             omit for ``{title}.pdf`` in the CWD, pass a ``.pdf`` path to use
             it literally, or pass a directory to save ``{title}.pdf`` inside it.

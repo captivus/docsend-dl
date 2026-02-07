@@ -10,8 +10,11 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 
 DOCSEND_URL_PATTERN = re.compile(
-    r"https?://(?:dbx\.)?docsend\.com/view/([a-zA-Z0-9]+)"
+    r"https?://(?:dbx\.)?docsend\.com/"
+    r"(?:view/([a-zA-Z0-9]+)|v/[a-zA-Z0-9]+/[a-zA-Z0-9-]+)"
 )
+
+_VIEW_SLUG_PATTERN = re.compile(r"/view/([a-zA-Z0-9]+)")
 
 _PAGE_DATA_BATCH_SIZE = 10
 
@@ -77,8 +80,13 @@ _EXTRACT_INFO_JS = """
     }
 
     if (!title) {
-        const slug = window.location.pathname.split('/view/')[1];
-        if (slug) title = 'docsend-' + slug.split('/')[0];
+        const viewMatch = window.location.pathname.match(/\\/view\\/([a-zA-Z0-9]+)/);
+        if (viewMatch) {
+            title = 'docsend-' + viewMatch[1];
+        } else {
+            const vMatch = window.location.pathname.match(/\\/v\\/[^/]+\\/([a-zA-Z0-9-]+)/);
+            if (vMatch) title = 'docsend-' + vMatch[1];
+        }
     }
 
     return { slideCount, title };
@@ -112,18 +120,29 @@ class DeckInfo:
     warnings: list[str] = field(default_factory=list)
 
 
-def parse_docsend_url(url: str) -> str:
-    """Validate a DocSend URL and return the document slug.
+def _extract_view_slug(url: str) -> str | None:
+    """Extract the ``/view/`` slug from a URL, or ``None`` if not found."""
+    match = _VIEW_SLUG_PATTERN.search(url)
+    return match.group(1) if match else None
+
+
+def parse_docsend_url(url: str) -> str | None:
+    """Validate a DocSend URL and return the document slug when available.
+
+    For ``/view/SLUG`` URLs the slug is returned directly.  For
+    ``/v/SPACE/NAME`` URLs the canonical slug is only known after the
+    browser follows any redirects, so ``None`` is returned.
 
     Raises:
-        InvalidURLError: If the URL doesn't match the expected pattern.
+        InvalidURLError: If the URL doesn't match any known DocSend pattern.
     """
     match = DOCSEND_URL_PATTERN.match(url)
     if not match:
         raise InvalidURLError(
             f"Invalid DocSend URL: {url}\n"
-            "Expected format: https://docsend.com/view/XXXXXX "
-            "or https://dbx.docsend.com/view/XXXXXX"
+            "Expected format: https://docsend.com/view/XXXXXX, "
+            "https://dbx.docsend.com/view/XXXXXX, "
+            "or https://docsend.com/v/SPACE/NAME"
         )
     return match.group(1)
 
@@ -142,7 +161,8 @@ async def extract_slide_urls(
     ``directImageUrl`` (S3 signed URL) for each slide.
 
     Args:
-        url: Full DocSend URL (e.g. ``https://docsend.com/view/XXXXXX``).
+        url: Full DocSend URL (e.g. ``https://docsend.com/view/XXXXXX``
+            or ``https://docsend.com/v/SPACE/NAME``).
         headless: Run browser in headless mode. Defaults to True.
 
     Returns:
@@ -201,6 +221,17 @@ async def extract_slide_urls(
                 "Could not find slide content on the page. "
                 "The page may have changed structure or failed to load."
             )
+
+        # Resolve the canonical /view/ slug from the browser's final URL.
+        # This handles /v/ URLs that DocSend redirects to /view/SLUG.
+        if slug is None:
+            slug = _extract_view_slug(url=page.url)
+            if slug is None:
+                await browser.close()
+                raise ExtractionError(
+                    "Could not determine the document slug. "
+                    f"After navigation the browser URL was: {page.url}"
+                )
 
         info = await page.evaluate(_EXTRACT_INFO_JS)
         slide_count: int = info["slideCount"]

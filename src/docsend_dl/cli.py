@@ -48,7 +48,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "url",
-        help="DocSend deck URL (e.g. https://docsend.com/view/XXXXXX)",
+        help=(
+            "DocSend deck URL (e.g. https://docsend.com/view/XXXXXX"
+            " or https://docsend.com/v/SPACE/NAME)"
+        ),
     )
     parser.add_argument(
         "--output",

@@ -84,6 +84,7 @@ async def download_deck(
     images_only: bool = False,
     on_status: Callable[[str], None] | None = None,
     on_slide_done: Callable[[], None] | None = None,
+    email: str | None = None,
 ) -> DeckDownloadResult:
     """Download all slides from a public DocSend deck.
 
@@ -128,6 +129,7 @@ async def download_deck(
         url=url,
         headless=headless,
         on_status=on_status,
+        email=email,
     )
 
     if images_only:

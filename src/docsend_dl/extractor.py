@@ -152,6 +152,7 @@ async def extract_slide_urls(
     *,
     headless: bool = True,
     on_status: Callable[[str], None] | None = None,
+    email: str | None = None,
 ) -> DeckInfo:
     """Navigate to a DocSend deck and extract S3 image URLs for all slides.
 
@@ -164,13 +165,16 @@ async def extract_slide_urls(
         url: Full DocSend URL (e.g. ``https://docsend.com/view/XXXXXX``
             or ``https://docsend.com/v/SPACE/NAME``).
         headless: Run browser in headless mode. Defaults to True.
+        email: Email address for email-gated decks. When provided the
+            email is submitted automatically. Defaults to None.
 
     Returns:
         A :class:`DeckInfo` with the deck title, slide count, and image URLs.
 
     Raises:
         InvalidURLError: If the URL is not a valid DocSend URL.
-        EmailGateError: If the deck requires email verification.
+        EmailGateError: If the deck requires email verification and no
+            *email* was supplied.
         ExtractionError: If slides cannot be found on the page.
     """
     def _report(message: str) -> None:
@@ -208,19 +212,46 @@ async def extract_slide_urls(
         try:
             await page.wait_for_selector(".carousel-inner .item", timeout=15_000)
         except PlaywrightTimeout:
-            email_form = await page.query_selector(
-                'input[type="email"], form[action*="email"], .visitor-email'
+            email_input = await page.query_selector(
+                '#link_auth_form_email'
             )
-            await browser.close()
-            if email_form:
+            if not email_input:
+                email_input = await page.query_selector(
+                    'input.js-auth-form_email-field'
+                )
+            if email_input and email:
+                _report("Email gate detected — submitting email...")
+                await email_input.click()
+                await email_input.fill(email)
+                continue_btn = await page.query_selector(
+                    'button:has-text("Continue")'
+                )
+                if continue_btn:
+                    await continue_btn.click()
+                else:
+                    await email_input.press("Enter")
+                try:
+                    await page.wait_for_selector(
+                        ".carousel-inner .item", timeout=30_000
+                    )
+                except PlaywrightTimeout:
+                    await browser.close()
+                    raise ExtractionError(
+                        "Submitted email but slides did not load. "
+                        "The deck may require additional verification."
+                    )
+            elif email_input:
+                await browser.close()
                 raise EmailGateError(
                     "This deck requires email verification to view. "
-                    "Only public (no-email) decks are supported."
+                    "Pass --email to provide an email address."
                 )
-            raise ExtractionError(
-                "Could not find slide content on the page. "
-                "The page may have changed structure or failed to load."
-            )
+            else:
+                await browser.close()
+                raise ExtractionError(
+                    "Could not find slide content on the page. "
+                    "The page may have changed structure or failed to load."
+                )
 
         # Resolve the canonical /view/ slug from the browser's final URL.
         # This handles /v/ URLs that DocSend redirects to /view/SLUG.

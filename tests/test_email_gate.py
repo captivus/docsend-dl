@@ -27,6 +27,7 @@ def _make_mock_page(
     *,
     primary_email_input: bool = False,
     fallback_email_input: bool = False,
+    generic_email_input: bool = False,
     has_continue_btn: bool = False,
     slides_load_after_email: bool = True,
 ):
@@ -39,6 +40,7 @@ def _make_mock_page(
     Args:
         primary_email_input: ``#link_auth_form_email`` is present.
         fallback_email_input: ``input.js-auth-form_email-field`` is present.
+        generic_email_input: ``input[type="email"]`` is present.
         has_continue_btn: Whether a "Continue" button is present.
         slides_load_after_email: Whether slides load after submitting email.
     """
@@ -63,9 +65,8 @@ def _make_mock_page(
 
     primary_mock = AsyncMock() if primary_email_input else None
     fallback_mock = AsyncMock() if fallback_email_input else None
-    # Use the primary mock as the canonical email input; if only fallback
-    # is set, that becomes the one the implementation interacts with.
-    email_input_mock = primary_mock or fallback_mock
+    generic_mock = AsyncMock() if generic_email_input else None
+    email_input_mock = primary_mock or fallback_mock or generic_mock
     continue_btn_mock = AsyncMock() if has_continue_btn else None
 
     async def _query_selector(selector):
@@ -73,6 +74,8 @@ def _make_mock_page(
             return primary_mock
         if selector == "input.js-auth-form_email-field":
             return fallback_mock
+        if selector == 'input[type="email"]':
+            return generic_mock
         if selector == 'button:has-text("Continue")':
             return continue_btn_mock
         return None
@@ -157,6 +160,24 @@ class TestEmailGateDetection:
         browser.close.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_email_gate_generic_selector_without_email_raises(self):
+        """EmailGateError via generic input[type=email] when specific selectors are absent."""
+        page, _ = _make_mock_page(
+            primary_email_input=False,
+            fallback_email_input=False,
+            generic_email_input=True,
+        )
+        browser, pw_cm = _build_playwright_mocks(page)
+
+        with patch("docsend_dl.extractor.async_playwright", return_value=pw_cm):
+            with pytest.raises(EmailGateError, match="--email"):
+                await extract_slide_urls(
+                    url="https://docsend.com/view/abc123",
+                )
+
+        browser.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_no_email_input_no_slides_raises_extraction_error(self):
         """ExtractionError is raised when there are no slides and no email form."""
         page, _ = _make_mock_page(
@@ -212,6 +233,29 @@ class TestEmailGateSubmission:
         page, mocks = _make_mock_page(
             primary_email_input=False,
             fallback_email_input=True,
+            has_continue_btn=True,
+            slides_load_after_email=True,
+        )
+        browser, pw_cm = _build_playwright_mocks(page)
+
+        with patch("docsend_dl.extractor.async_playwright", return_value=pw_cm):
+            deck = await extract_slide_urls(
+                url="https://docsend.com/view/abc123",
+                email="user@example.com",
+            )
+
+        mocks["email_input"].click.assert_awaited_once()
+        mocks["email_input"].fill.assert_awaited_once_with("user@example.com")
+        browser.close.assert_awaited_once()
+        assert deck.slide_count == 2
+
+    @pytest.mark.asyncio
+    async def test_email_submitted_via_generic_selector(self):
+        """Email is submitted via generic input[type=email] when specific selectors are absent."""
+        page, mocks = _make_mock_page(
+            primary_email_input=False,
+            fallback_email_input=False,
+            generic_email_input=True,
             has_continue_btn=True,
             slides_load_after_email=True,
         )

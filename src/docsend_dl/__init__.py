@@ -106,6 +106,8 @@ async def download_deck(
         concurrency: Maximum number of concurrent image downloads.
         max_retries: Number of retry attempts per image download.
         images_only: Save individual PNG images instead of a PDF.
+        email: Email address for email-gated decks. When provided the
+            email is submitted automatically. Defaults to None.
 
     Returns:
         A :class:`DeckDownloadResult` summarizing the outcome.

@@ -219,6 +219,10 @@ async def extract_slide_urls(
                 email_input = await page.query_selector(
                     'input.js-auth-form_email-field'
                 )
+            if not email_input:
+                email_input = await page.query_selector(
+                    'input[type="email"]'
+                )
             if email_input and email:
                 _report("Email gate detected — submitting email...")
                 await email_input.click()

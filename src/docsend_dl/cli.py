@@ -81,6 +81,12 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="headless",
         help="Show the browser window during download",
     )
+    parser.add_argument(
+        "--email",
+        type=str,
+        default=None,
+        help="Email address for email-gated decks",
+    )
     return parser
 
 
@@ -121,6 +127,7 @@ async def _async_main(args: argparse.Namespace) -> None:
             url=args.url,
             headless=args.headless,
             on_status=lambda msg: status.update(f"[bold blue]{msg}"),
+            email=args.email,
         )
 
     console.print(
